@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Platform game test</title>
+  <style>
+        input{
+            width: 100%;
+
+        }
+
+        #platform_game_wrapper{
+            position: relative;
+            width: 960px;
+            margin: auto;
+            margin-top: 50px;
+            image-rendering: pixelated;
+        }
+
+        #platform_game_foreground{
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+        } 
+        #platform_game_background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+  </style>
+</head>
+<body>
+  <img alt="" id="bk" src="images/background/test.png" style="display: none">
+  <div id="platform_game_wrapper">
+    <canvas id="platform_game_foreground"></canvas>
+    <canvas id="platform_game_background"></canvas>
+  </div>
+  <script>
+
+    var Platform_game = function () {
+        window.onload = function() {
+        // setup 
+        var context_foreground, context_background, controller, character, loop, 
+            tile = 32,
+            board_width = 30,
+            board_height = 20,
+            canvas_height = board_height * tile,
+            canvas_width = board_width * tile,
+            gravity = 1,
+            x_friction = .8,
+            y_friction = .95,
+            board_center = (board_width * tile)/2,
+            camera_bounds_left = board_center - (tile * 5),
+            camera_bounds_right = board_center + (tile * 5),
+            camera_move = false,
+            camera_offset_x = 0,
+            camera_offset_y = 0,
+            out_of_bounds = false,
+            frame = 0,
+            interval=5,
+            jump_speed_default = 20,
+            jump_speed_low = 10,
+            jump_speed_high = 35,
+            parallax = .5,
+            parallax_width = 0, 
+            cutoff = 0,
+            coins_remaining = 30,
+            gradient;
+
+        character = {
+          x: board_center, // starting point for the character
+          x_velocity:0,
+          y:0,
+          y_velocity:0,
+          height: tile * 2,
+          width: tile,
+          velocity : 1.5,
+          boost: 1.5,
+          jumping:false,
+          running: false,
+          ducking: false,
+          stopped: true,
+          desending: true,
+          on_platform:false,
+          rocket_possible: false,
+          rocket: false,
+          rocket_fuel: 100,
+          rocket_speed:1.5,
+          jump_speed : jump_speed_default,
+          previous_x: board_center,
+          previous_y: 0,
+          direction: "right",
+          ani: "",
+          speed: 0
+        };
+
+
+
+
+        var bk = new Image();
+        bk.src = "images/background/test.png";
+
+        var grid9 = new Image();
+        grid9.src = "images/sprites/9grid.png";
+
+        var orb = new Image();
+        orb.src = "images/sprites/orb.png";
+
+        parallax_width = (bk.width * parallax) + bk.width;
+        cutoff = Math.floor(bk.width - (bk.width * parallax));
+        // console.log(parallax_width, bk.width, canvas_width)   
+
+        // setup canvas context
+        context_foreground = document.getElementById("platform_game_foreground").getContext("2d");
+        context_foreground.canvas.height = canvas_height;
+        context_foreground.canvas.width = canvas_width;
+
+        context_background = document.getElementById("platform_game_background").getContext("2d");
+        context_background.canvas.height = canvas_height;
+        context_background.canvas.width = canvas_width;
+
+        // assests
+
+        function Asset(opt){
+        	// size and possition in tile increments
+        	  this.x 				 = opt.x * tile;
+            this.y 				 = opt.y * tile;
+            this.width  	 = opt.width * tile;
+            this.height 	 = opt.height * tile;
+            this.type   	 = opt.type;
+            this.name   	 = opt.name;
+            this.visible	 = true;
+            this.exploding = false; 
+        }
+
+        var assets = [];
+
+        for (var i = 0; i<40; i++){
+        	if(i<20){
+        		assets.push(new Asset({
+            	x: (Math.floor(Math.random() * 115) + 1 ),
+            	y: (Math.floor(Math.random() * 18) + 1 ),
+            	width: (Math.floor(Math.random() * 7) + 2 ),
+							height: (Math.floor(Math.random() * 4) + 2 ),
+							type: "platform",
+							name: "green"
+            }));
+        	} else {
+        		assets.push(new Asset({
+            	x: (Math.floor(Math.random() * 115) + 1 ),
+            	y: (Math.floor(Math.random() * 18) + 1 ),
+            	width: 1,
+							height: 1,
+							type: "good",
+							name: "coin"
+            }));
+        	}
+        }
+
+                assets.push(new Asset({
+              x: 0,
+              y: 19,
+              width: 120,
+              height: 3,
+              type: "platform",
+              name: "ground"
+            }));
+
+      var asset_library = [
+        {
+          type:"platform",
+          name:"ground",
+          sprite: "",
+          x: 0,
+          y: 19, //1 tile above board bottom
+          width: 120,
+          height: 3,
+        },
+        {
+          type:"platform",
+          name:"2x1",
+          sprite: "",
+          width:2,
+          height:1
+        },
+        {
+          type:"platform",
+          name:"3x1",
+          sprite: "",
+          width:3,
+          height:1
+        },
+        {
+          type:"platform",
+          name:"2x2",
+          sprite: "",
+          width:2,
+          height:2
+        },
+        {
+          type:"platform",
+          name:"4x1",
+          sprite: "",
+          width:4,
+          height:1
+        },
+        {
+          type: "good",
+          name: "coin",
+          sprite:"",
+          width:1,
+          height:1
+        }
+
+      ]
+
+
+
+
+
+function collideBehavior(sprite){
+	         for (var i=0; i < assets.length; ++i) { 
+            otherSprite = assets[i];
+ 
+            if (isCandidateForCollision(sprite, otherSprite)) {
+               if (didCollide(sprite, otherSprite)) { 
+                  processCollision(sprite, otherSprite);
+               }
+            }
+         }
+
+}
+
+function isCandidateForCollision(sprite, otherSprite){
+  // only check visible assest that are on screen 
+	
+  if( otherSprite.x + camera_offset_x > 0 || otherSprite.x + camera_offset_x <  canvas_width || otherSprite.visible || !otherSprite.exploding){
+    return true;
+  }
+}
+
+ function didCollide(sprite,      // runner
+                          otherSprite // candidate for collision
+                          ) {  
+      var left = sprite.x +4,
+          right = sprite.x + sprite.width -4,
+          top = (sprite.jumping)?sprite.y:sprite.y+10,
+          bottom = sprite.y + sprite.height,
+          centerX = left + sprite.width/2,
+          centerY = sprite.y + sprite.height/2;
+
+          if(sprite.ducking)top=sprite.y+tile;
+
+      // visual box around my character
+     //   context_foreground.lineWidth = 1;
+   		// context_foreground.strokeStyle = "yellow";
+   		// context_foreground.strokeRect(left, top, right-left, bottom-top); 
+
+
+ 
+      // if (otherSprite.type !== 'good') {
+         return didRunnerCollideWithOtherSprite(left, top, right, bottom,
+                                                         centerX, centerY,
+                                                         otherSprite);
+      // }
+      // else {
+      //    return didSnailBombCollideWithRunner(left, top, right, bottom,
+      //                                                  otherSprite);
+      // }
+   }
+
+   function didRunnerCollideWithOtherSprite(left, top, right, bottom,
+                                              centerX, centerY,
+                                              otherSprite) {
+   // Determine if either of the runner's four corners or its
+   // center lies within the other sprite's bounding box. 
+
+   		
+   		context_background.beginPath();
+   		context_background.rect(otherSprite.x + camera_offset_x, otherSprite.y, otherSprite.width, otherSprite.height);
+      // context_foreground.strokeRect(otherSprite.x + camera_offset_x, otherSprite.y, otherSprite.width, otherSprite.height);
+
+
+   		
+
+   		return context_background.isPointInPath(left,    top)  ||
+          context_background.isPointInPath(right,   top)     ||
+ 
+          context_background.isPointInPath(centerX, centerY) ||
+ 
+          context_background.isPointInPath(left,    bottom)  ||
+          context_background.isPointInPath(right,   bottom);
+          
+   		}
+
+   		function processCollision (sprite, otherSprite) {
+
+      if(otherSprite.name == "coin" && otherSprite.visible){
+      	otherSprite.visible = false;
+        character.rocket_fuel += 10;
+      }
+      if( (sprite.desending || !sprite.jumping) && otherSprite.type == "platform" && ( (sprite.y + sprite.height) < (otherSprite.y + (tile/2)) || otherSprite.name == "ground" )){
+
+      	sprite.jumping = false;
+        sprite.in_air = false;
+        sprite.rocket = false;
+        sprite.rocket_possible = false;
+        if(otherSprite.name !== "ground"){
+          sprite.on_platform = true;
+        } else {
+        sprite.on_platform = false;
+        }
+      	sprite.y_velocity = 0;
+      	sprite.y = otherSprite.y - sprite.height ;
+      } else {
+        sprite.on_platform = false;
+      }
+
+      if(!sprite.on_platform  && otherSprite.type == "platform" && otherSprite.name !== "ground"){
+        if (sprite.asending){
+          sprite.y == otherSprite.y + otherSprite.height;
+          sprite.y_velocity = 0;
+          sprite.falling = true;
+        }
+
+         sprite.x_velocity = 0;
+          // kind of creates a sticky feeling to the blocks. 
+          sprite.x = sprite.previous_x;
+
+        // if (sprite.direction == "left" || sprite.direction == "right"){
+        //   sprite.x_velocity = 0;
+        //   // kind of creates a sticky feeling to the blocks. 
+        //   sprite.x = sprite.previous_x;
+        //   console.log("collide left")
+        // } 
+
+
+      }
+      
+   }
+ 
+
+
+        // function blockCheck(a, b) {
+        //     // only on the way down
+        //     if( character.previous_y > character.y && character.y + (character.height ) > b.y ) return false;
+        //     if( (character.y + character.height) >= b.y && (character.y + character.height) <= (b.y + b.height) && ( (character.x < (b.x + b.width + camera_offset_x) && character.x > b.x) || (character.x + character.width < (b.x + b.width + camera_offset_x) && character.x + character.width > b.x + camera_offset_x) )  ) {
+        //         // you're standing a block;
+        //          //character.jumping = false;
+                
+        //          character.y_velocity = 0;
+        //           character.y = b.y - character.height;
+        //           return true;
+
+        //     } else {
+        //         return false;
+        //     }
+        // }
+
+
+        // USE A GOD DAMN SPRITE SHEET FOOL!
+        character.sprite = new Image();
+        character.sprite.src = "images/sprites/astronaut_sheet.png";
+
+        character.ANIMATION = {};
+        //these will be arrays once there is animation
+        character.ANIMATION.stand_right = 0;
+        character.ANIMATION.walk_right = 1;
+        character.ANIMATION.jump_right = 2;
+        character.ANIMATION.duck_right = 3;
+        character.ANIMATION.stand_left = 7;
+        character.ANIMATION.walk_left = 6;
+        character.ANIMATION.jump_left = 5;
+        character.ANIMATION.duck_left = 4;
+
+
+        controller = {
+
+          left:false,
+          right:false,
+          jump_down:false,
+          jump_up:true,
+          down:false,
+          last_dir: "",
+          release_jump: true,
+          double_jump: false,
+          block:false,
+          keyListener:function(event) {
+            var keydown = (event.type == "keydown")?true:false,
+                keyup = (event.type == "keyup")?true:false;
+
+             switch(event.keyCode) {
+              case 37:// left key
+                controller.left = keydown;
+              break;
+              case 90:// z key
+                controller.run = keydown;
+              break;
+              case 39:// right key
+                controller.right = keydown;
+              break;
+              case 40:// down key
+                controller.down = keydown;
+              break;
+              case 88:// x key              
+                controller.jump_down = keydown;
+                controller.jump_up = keyup;
+              break;
+            }
+
+          }
+        };
+
+
+
+        function update(){
+          character.speed = Math.floor(Math.abs(character.x_velocity));
+          character.desending = (character.previous_y < character.y )?true:false;
+          character.asending = (character.previous_y > character.y )?true:false;
+          character.previous_y = character.y;
+
+
+
+
+          
+          if (controller.jump_up && character.jumping){
+            character.rocket_possible = true;
+          } 
+
+          if(controller.jump_up && character.rocket){
+            character.rocket = false; 
+          }
+          
+
+          if(character.jumping && character.rocket_possible && controller.jump_down){
+            character.rocket = true; 
+          }
+
+
+          if(controller.jump_up && controller.jump_down){
+            controller.release_jump = true;
+          }  else {
+             controller.release_jump = false;
+          }
+
+          character.running = (controller.run)?true:false;
+
+          if (controller.left && !controller.down) {
+            character.x_velocity -= (character.running)?character.velocity+character.boost:character.velocity;
+            character.direction = "left";
+          }
+
+          if (controller.right && !controller.down) {
+            character.x_velocity += (character.running)?character.velocity+character.boost:character.velocity;
+            character.direction = "right";
+          }
+
+
+          if(controller.down){
+            character.ducking = true;
+            x_friction = .99;
+          } else {
+            x_friction = .8;
+            character.ducking = false;
+          }
+
+
+
+
+          if (controller.jump_down && !character.jumping) {
+            character.jumping = true;
+            if(character.running && character.speed> 9) {
+                character.jump_speed = jump_speed_high;
+              } else if(controller.down) {
+                  character.jump_speed = jump_speed_low;
+              } else {
+                  character.jump_speed = jump_speed_default;
+              }
+              character.y_velocity -= character.jump_speed; 
+          }
+
+          if(controller.down && character.jumping){
+            character.y_velocity += 2;
+          }
+
+
+          if(character.rocket && character.rocket_fuel >0 ){          
+            character.y_velocity -= character.rocket_speed;
+            character.rocket_fuel--;
+          }
+
+           character.stopped = (character.speed == 0 && !character.jumping)?true:false;
+            
+          
+
+          if(character.direction == "right" && !character.jumping && !character.ducking && !character.stopped){
+            character.ani = character.ANIMATION.walk_right;
+          } else if(character.direction == "left" && !character.jumping && !character.ducking && !character.stopped){
+            character.ani = character.ANIMATION.walk_left;
+          } else if(character.direction == "left"  && character.ducking){
+            character.ani = character.ANIMATION.duck_left;
+          } else if(character.direction == "right" && character.ducking){
+            character.ani = character.ANIMATION.duck_right;
+          } else if(character.direction == "left" && character.jumping && !character.ducking){
+            character.ani = character.ANIMATION.jump_left;
+          } else if(character.direction == "right" && character.jumping && !character.ducking){
+            character.ani = character.ANIMATION.jump_right;
+          } else if(character.direction == "left" && character.stopped && !character.ducking){
+            character.ani = character.ANIMATION.stand_left;
+          } else if(character.direction == "right" && character.stopped && !character.ducking){
+            character.ani = character.ANIMATION.stand_right;
+          } 
+
+
+
+          // apply basic physics
+          character.y_velocity += gravity;// gravity
+         
+          character.x += character.x_velocity;// speed
+          character.y += character.y_velocity;// speed   
+          
+          character.x_velocity *= x_friction;// friction
+          character.y_velocity *= y_friction;// friction
+
+
+          // Prevent eaving the playing field
+          if(character.x < 0  ){
+            character.x = 0;
+          }
+
+          if(character.x > (canvas_width - character.width) ){
+            character.x = (canvas_width - character.width);
+
+          }
+
+          // check of out of camera bounds. Handle camera movement. Only on X for now. 
+          if(out_of_bounds == true && character.x >= camera_bounds_left && character.x <= camera_bounds_right ) {
+            out_of_bounds = false;
+          }
+          if( (character.x <= camera_bounds_left || character.x >= camera_bounds_right) && out_of_bounds == false){
+            
+            camera_offset_x -= character.x_velocity;
+            if(camera_offset_x > 0){
+                camera_offset_x = 0;
+                camera_move = false;
+                out_of_bounds = true;
+                character.previous_x = character.x;
+            } else  if(camera_offset_x  < (Math.abs(bk.width + cutoff - canvas_width ) * -1)) {
+                camera_offset_x = (Math.abs(bk.width + cutoff- canvas_width) * -1)  ;
+                camera_move = false;
+                out_of_bounds = true;
+                character.previous_x = character.x;
+
+            } else {
+                camera_move = true;
+                character.x = character.previous_x;
+            }
+          } else {
+            camera_move = false;
+            character.previous_x = character.x;
+          }
+
+          
+        }
+
+
+        function draw_tile_9grid(sprite,assest, row,column, pos) {
+          var x,y;
+          switch(pos){
+            case 1:
+              x = 0;
+              y = 0;
+            break;
+            case 2:
+              x = 32;
+              y = 0;
+            break;
+            case 3:
+              x = 64;
+              y = 0;
+            break;
+            case 4:
+              x = 0;
+              y = 32;
+            break;
+            case 5:
+              x = 32;
+              y = 32;
+            break;
+            case 6:
+              x = 64;
+              y = 32;
+            break;
+            case 7:
+              x = 0;
+              y = 64;
+            break;
+            case 8:
+              x = 32;
+              y = 64;
+            break;
+            case 9:
+              x = 64;
+              y = 64;
+            break;
+         }
+          context_background.drawImage(
+                            sprite, 
+                            x, 
+                            y, 
+                            tile, 
+                            tile, 
+                            assest.x + (column * tile) + camera_offset_x, 
+                            assest.y + (row * tile),  
+                            tile, 
+                            tile);
+        }
+
+        function draw() {
+          var i = 0;
+            
+
+            if(character.walk_frame>4)character.walk_frame=0;
+            
+            context_foreground.clearRect(0,0,canvas_width,canvas_height);
+
+
+
+            context_foreground.drawImage(character.sprite, character.ani * tile, 0, character.width, character.height, character.x, character.y,  character.width, character.height);
+
+            // if(character.stopped){
+            //      context_foreground.drawImage(character.radish, 0, 0, character.width, character.height, character.x, character.y,  character.width, character.height);
+            // } else {
+            //  context_foreground.drawImage(character.walk, character.walk_frame * 32 , 0, character.width, character.height, character.x, character.y,  character.width, character.height);
+            // }
+
+            
+            // USE FOR ANIMATION LATER
+            // if(character.x_velocity < -13 || character.x_velocity  > 13){
+            //  interval = 2;
+            // } else if (character.x_velocity < -5 || character.x_velocity  > 5){
+            //  interval = 7;
+            // } else if (character.x_velocity < -2 || character.x_velocity  > 2){
+            //  interval = 11;
+            // } else {
+            //  interval = 20;
+            // }
+
+            // if(character.stopped)interval = 99999999;
+
+            // if(frame%interval == 0) character.walk_frame++;
+            // frame++;        
+        
+
+      
+                
+                context_background.clearRect(0,0,canvas_width,canvas_height);        
+                context_background.drawImage(bk, camera_offset_x * parallax, camera_offset_y);
+
+                assets.forEach(function(a){
+                	if(a.type == "platform") {
+                    var sprite,
+                        tiles_w = a.width/tile,
+                        tiles_h = a.height/tile;
+
+                    for(var h = 0; h< tiles_h;h++){
+                      for(var w = 0; w< tiles_w;w++){
+                        if(h==0){
+                          // top row
+                          if(w==0){
+                            //top left
+                            draw_tile_9grid(grid9, a, h,w, 1);
+                          } else if(w < (tiles_w -1)){
+                            //top middle
+                            draw_tile_9grid(grid9, a, h,w, 2);
+                          } else if(w ==  (tiles_w -1)){
+                            // top right
+                            draw_tile_9grid(grid9, a, h,w, 3);
+                          }
+                        } else if(h<(tiles_h -1)){
+                          // middle row
+                          if(w==0){
+                            //middle left
+                            draw_tile_9grid(grid9, a, h,w, 4);
+                          } else if(w < (tiles_w -1)){
+                            //middle middle
+                            draw_tile_9grid(grid9, a, h,w, 5);
+                          } else if(w ==  (tiles_w -1)){
+                            // middle right
+                            draw_tile_9grid(grid9, a, h,w, 6);
+                          } 
+                        } else if(h==(tiles_h -1)){
+                          // bottom row
+                          if(w==0){
+                            //bottom left
+                            draw_tile_9grid(grid9, a, h,w, 7);
+                          } else if(w < (tiles_w -1)){
+                            //bottom middle
+                            draw_tile_9grid(grid9, a, h,w, 8);
+                          } else if(w ==  (tiles_w -1)){
+                            // bottom right
+                            draw_tile_9grid(grid9, a, h,w, 9);
+                          }
+                        } 
+                      }
+                    }
+                	} if(a.name == "coin"){
+                			if(a.visible) {
+                      draw_tile_9grid(orb,a,0,0,1);
+                    }
+                	}
+                });
+
+         
+
+                // coins remaining
+                coins_remaining = assets.filter(function(x){ if (x.visible && x.name == "coin"){return x;}}).length;
+
+                context_foreground.font = "40px Arial";
+                context_foreground.fillStyle = "white";
+                context_foreground.fillText("Fuel: " + character.rocket_fuel,10, 40);
+
+
+                // speed
+                var prev = 32;
+                
+                for (i = 0 ; i<character.speed; i++){
+                  
+                  if(i<=3){
+                    context_foreground.fillStyle = "green";
+                  } else if( i > 3 && i <=8){
+                    context_foreground.fillStyle = "yellow";
+                  } else if( i >8){
+                    context_foreground.fillStyle = "red";
+                  }
+                  
+                  context_foreground.fillRect( prev  , canvas_height-16,  10, 5);
+                  prev = prev + 12;
+                }
+
+                if(character.speed>8){
+                  context_foreground.font = "18px Arial";
+                context_foreground.fillStyle = "white";
+                context_foreground.fillText("HIGH JUMP!",192, canvas_height-10);
+                }
+
+
+                 context_foreground.fillStyle = "rgba(255, 50, 7, 0.62)";
+                 prev = 10;
+
+                for(i=0;i<character.rocket_fuel;i++){
+                   context_foreground.fillRect( prev  , 50, 3, 8);
+                  prev = prev + 5;
+
+                }
+
+
+
+               
+
+            
+        }
+
+        // game loop. Add fps later
+        loop = function() {
+
+        
+          update();
+          draw();
+            collideBehavior(character);      
+          
+          window.requestAnimationFrame(loop);
+        };  
+
+        window.addEventListener("keydown", controller.keyListener)
+        window.addEventListener("keyup", controller.keyListener);
+        window.requestAnimationFrame(loop);     
+      };                      
+    }
+    
+
+    Platform_game();
+
+
+  </script>
+</body>
+</html>
