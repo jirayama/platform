@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Platform game test</title>
+  <style>
+        input{
+            width: 100%;
+
+        }
+
+        #platform_game_wrapper{
+            position: relative;
+            margin: auto;
+            margin-top: 50px;
+            image-rendering: pixelated;
+
+        }
+
+        #platform_game_foreground{
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+             border: 1px solid grey;
+        } 
+        #platform_game_background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+  </style>
+</head>
+<boy>
+  <img alt="" id="bk" src="images/background/test.png" style="display: none">
+  <div id="platform_game_wrapper">
+    <canvas id="platform_game_foreground"></canvas>
+    <canvas id="platform_game_background"></canvas>
+
+  </div>
+
+  <script>
+
+  var Platform_game = function () {
+
+     var grid9 = new Image();
+        grid9.src = "images/sprites/9grid.png";
+
+    var orb = new Image();
+        orb.src = "images/sprites/orb.png";
+
+    var char_sheet = new Image();
+        char_sheet.src = "images/sprites/astronaut_sheet.png";
+
+
+    var vendors = ['webkit', 'moz'];
+    for(var x = 0; x < vendors.length && !window.requestAnimationFrame; ++x) {
+        window.requestAnimationFrame = window[vendors[x]+'RequestAnimationFrame'];
+        window.cancelAnimationFrame =
+        window[vendors[x]+'CancelAnimationFrame'] || window[vendors[x]+'CancelRequestAnimationFrame'];
+    }
+
+    // game settings 
+    var board_h = 20,
+        board_w = 70,
+        window_w = 30,
+        window_h = 20,
+        tile = 32,
+        x_cam_offset = 0,
+        y_cam_offset = 0,
+        gravity = 1.5, 
+        gravity_default = 2.5, 
+        gravity_slow_fall = .5,           
+        x_friction_default = .9,
+        x_friction = x_friction_default,
+        x_friction_air = .7,
+        x_friction_ducking = .95,
+        y_friction = .9,
+        jump_speed_default = 60,
+        jump_speed_low = 10,
+        jump_speed_high = 35,
+        parallax = .5,
+        assets = [],
+        vector_x = 0,
+        vector_y = 0;
+
+      // for single frames for temp
+
+      function addFrame(img,name,facing, sx,sy,sw,sh){
+        return {
+          name:name ,
+          img: img,
+          facing: facing,
+          sx: sx * tile,
+          sy: sy * tile,
+          sw: sw * tile,
+          sh: sh * tile
+        }
+      }
+    var ANI_lib = [
+      addFrame(char_sheet,"standing", "right", 0,0,1,2 ),
+      addFrame(char_sheet,"standing", "left",7,0,1,2 ),
+      addFrame(char_sheet,"move", "right", 1,0,1,2 ),
+      addFrame(char_sheet,"move", "left",6,0,1,2 ),
+      addFrame(char_sheet,"jump", "right", 2,0,1,2 ),
+      addFrame(char_sheet,"jump", "left",5,0,1,2 ),
+      addFrame(char_sheet,"duck", "right", 3,0,1,2 ),
+      addFrame(char_sheet,"duck", "left",4,0,1,2 )
+    ]
+
+    console.log(ANI_lib)
+
+    Asset.prototype.setSprite = function(name){
+      var facing = this.facing;
+      this.sprite = ANI_lib.filter(function(x){return x.name == name && x.facing == facing})[0];
+     
+    }
+
+   
+
+
+
+    function Asset(opt){
+        this.x = opt.x * tile;
+        this.y = opt.y * tile;
+        this.vx = 0;
+        this.vy = 0;
+        this.width = opt.width  * tile;
+        this.height = opt.height  * tile;
+        this.onGround = false;
+        this.type = opt.type;
+        this.name = opt.name || "";
+        this.facing = opt.facing || "right";
+        this.visible = true;
+    }
+
+     Asset.prototype.drawSprite = function(ctx){
+      if(this.sprite){
+        ctx.drawImage(this.sprite.img, this.sprite.sx, this.sprite.sy, this.sprite.sw, this.sprite.sh, this.x, this.y, this.width, this.height);
+      }
+      
+    }
+
+    Asset.prototype.drawBB = function(ctx){
+      
+      ctx.fillRect(this.x, this.y, this.width, this.height);
+      
+      
+    }
+
+
+
+    var player = new Asset({
+          type: "player",
+          name: "jill",
+          width: 1,
+          height: 2,
+          x: 10,
+          y: 5   
+        });
+
+
+    
+      player.jumping = false;
+      player.running = false;
+      player.x_force = .8;
+      player.x_force_run = 2.7;
+      player.jumping_gravity = .5;
+      player.facing = "right";
+      player.dead = false;
+      player.lives = 5;
+      player.held_jump = false;
+      player.mid_jump = true;
+      player.onGround = false;
+      player.y_dist = 0;
+      player.x_dist = 0; 
+      player.last_x = player.x;
+      player.last_y = player.y;     
+      player.fuel_tank = 40;
+      player.rocket_fuel = player.fuel_tank;
+      player.ANI = "standing";
+      player.sprite;
+
+      player.setSprite("standing")
+
+      console.log(player)
+
+
+assets.push(
+  new Asset({
+          type: "platform",
+          name: "test",
+          width: 8,
+          height: 2,
+          x: 0,
+          y: 10       
+        })
+  ) 
+assets.push(
+  new Asset({
+          type: "platform",
+          name: "ground",
+          width: 70,
+          height: 2,
+          x: 0,
+          y: 17       
+        })
+  ) 
+
+assets.push(
+  new Asset({
+          type: "platform",
+          name: "test",
+          width: 3,
+          height: 2,
+          x: 12,
+          y: 15       
+        })
+  ) 
+
+    
+
+
+    var ctx_fore,
+        ctx_back,
+        ctx_fore_w,
+        ctx_fore_h,
+        ctx_back_w,
+        ctx_back_h,
+        fps = 60,
+        bX = 30,
+        bY = 30,
+        mX = 10,
+        mY = 20,
+        interval     =    1000/fps,
+        lastTime     =    (new Date()).getTime(),
+        currentTime  =    0,
+        delta = 0;
+
+    ctx_fore = document.getElementById('platform_game_foreground').getContext("2d"),
+    ctx_back = document.getElementById('platform_game_background').getContext("2d"),
+    ctx_fore.canvas.width = window_w * tile,
+    ctx_fore.canvas.height = window_h * tile,
+    ctx_back.canvas.width = window_w * tile,
+    ctx_back.canvas.height = window_h * tile,
+    ctx_fore_w = ctx_fore.canvas.width,
+    ctx_fore_h = ctx_fore.canvas.height,
+    ctx_back_w = ctx_back.canvas.width,
+    ctx_back_h = ctx_back.canvas.height;
+    document.getElementById("platform_game_wrapper").style.width = window_w * tile + "px";
+
+    function update(){
+      
+      player.y_dist = player.y - player.last_y;
+      player.x_dist = player.x - player.last_x; 
+      player.last_x = player.x;
+      player.last_y = player.y; 
+      // x movement
+      if(controller.left && !controller.down){
+         player.facing = "left";
+        player.setSprite("move");
+       
+        player.vx -= player.x_force;
+      } else if(controller.right && !controller.down){
+        player.facing = "right";
+        player.setSprite("move");       
+        player.vx += player.x_force;
+      }
+
+      if(controller.down){
+         player.setSprite("duck");
+      } 
+
+
+      if(controller.jump  && !player.jumping &&!player.held_jump){                
+       player.setSprite("jump");
+       player.jumping = true;
+       player.held_jump = true;
+       player.onGround = false;
+       player.vy -= jump_speed_default;      
+      } 
+
+      if(!controller.jump) {
+        player.held_jump = false;
+      }
+
+      if(player.onGround && !controller.left && !controller.right){
+        player.setSprite("standing");
+      }
+     
+      player.x += player.vx;
+      player.vx *= x_friction;
+
+      //if(!player.onGround){
+        player.vy += gravity;
+        player.vy *= y_friction;
+        player.y += player.vy;
+      //}
+
+    }
+
+    function handleCollision(){
+
+      //var collision = false;
+      assets.forEach(function(a){
+        if(a.visible){          
+          if(didPairColide(player,a)){
+            //collision = true;
+            var min_top = (player.y + player.height)-a.y,
+                min_bottom = (a.y + a.height) - player.y,
+                min_left = (player.x + player.width)-a.x,
+                min_right = (a.x + a.width) - player.x;
+
+            vector_x = (player.x + (player.x + player.width/2)) - (a.x + (a.x + a.width/2));
+            vector_y = (player.y + (player.y + player.height/2)) - (a.y + (a.y + a.height/2));
+
+            if (Math.abs(vector_x / a.width) < Math.abs(vector_y / a.height)) {
+              if (vector_y > 0  && player.y_dist<0) {
+                //player.y = a.y + a.height  - player.less_top; // bottom
+                //player.y++;
+                player.y +=  min_bottom;                  
+              } else {
+
+                player.y -= min_top;
+                player.onGround = true;
+                player.jumping = false;
+                
+                //player.y = a.y - player.height; // top
+               //player.y = Math.floor(player.y);
+               //.on_ground= true;
+
+                //player.y--;
+              if(player.y+player.height<a.y) {
+                player.in_air = false;
+                player.rocket_fuel = player.fuel_tank; 
+                } 
+              }
+              player.y_velocity=0;
+              
+            } else {
+              
+              if (vector_x < 0) {
+                player.x -= min_left
+                // player.x = a.x - player.width + player.less_right;// left
+                //player.x--;// left
+              } else {
+                player.x += min_right;
+                //player.x = a.x + a.width - player.less_left; // right
+                //player.x++;
+              }
+              player.x_velocity = 0;
+             
+            }
+
+          
+            
+           
+
+          }
+        }
+      })
+    }
+            
+
+            // vector_x = player.center_x - a.center_x;
+            // vector_y = player.center_y - a.center_y;
+          //   // var aw = (player.width + a.width) * 0.5;// average width
+          //   // var ah = (player.height + a.height) * 0.5;// average height
+
+          //    // if (Math.abs(dx) > aw || Math.abs(dy) > ah) return false;
+          //    if(player.y_dist<0) console.log( "came from below")
+          //   if(player.y_dist>0) console.log( "came from above")
+          //    // if(Math.abs(player.x_dist)>Math.abs(vector_x))console.log( player.x_dist, vector_x)
+           
+    
+
+          //     //player.updateBoundingBox();         
+          // } else {
+          //   player.onGround = false;
+          // }
+      //   }       
+      // })
+    
+     
+
+    //}
+
+    function didPairColide(a,b){
+        //b.drawBB(ctx_fore);
+        return !(
+          a.x > b.x + b.width ||
+          a.x + a.width < b.x ||
+          a.y > b.y + b.height ||
+          a.y + a.height < b.y
+          );  
+      }
+
+    function draw(){
+      ctx_fore.clearRect(0,0,window_w *tile,window_h *tile);
+
+      assets.forEach(function(a){
+        a.drawBB(ctx_fore);
+      })
+      player.drawSprite(ctx_fore);
+
+    }
+
+
+     controller = {
+          left:false,
+          right:false,
+          jump:false,
+          down:false,
+          up:false,
+          keyListener:function(event) {
+            var keydown = (event.type == "keydown")?true:false,
+                keyup = (event.type == "keyup")?true:false;
+                // if(event.type == "mousemove"){
+                //   player.x=event.clientX;
+                //   player.y=event.clientY;
+                // }
+
+             switch(event.keyCode) {
+              case 37:// left key
+                controller.left = keydown;
+              break;
+              case 90:// z key
+                controller.run = keydown;
+              break;
+              case 39:// right key
+                controller.right = keydown;
+              break;
+               case 38:// up key
+                controller.up = keydown;
+              break;
+              case 40:// down key
+                controller.down = keydown;
+              break;
+              case 88:// x key              
+                controller.jump = keydown;
+                // controller.jump_up = keyup;
+              break;
+            }
+          }
+        };
+
+    function gameLoop() {
+        window.requestAnimationFrame(gameLoop);
+
+        currentTime = (new Date()).getTime();
+        delta = (currentTime-lastTime);
+
+        if(delta > interval) {
+          // main game loop start
+          update();
+          handleCollision();
+          draw();
+          // main game loop end
+          lastTime = currentTime - (delta % interval);
+        }
+    }
+
+    window.addEventListener("keydown", controller.keyListener)
+    window.addEventListener("keyup", controller.keyListener);
+     window.addEventListener("mousemove", controller.keyListener);
+
+    gameLoop();                   
+  }
+    
+
+  window.onload = function() {
+    Platform_game();
+  }
+
+
+  </script>
+</boy>
+</html>
