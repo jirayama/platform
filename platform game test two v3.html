@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Platform game test</title>
+  <style>
+        input{
+            width: 100%;
+
+        }
+
+        #platform_game_wrapper{
+            position: relative;
+            margin: auto;
+            margin-top: 50px;
+            image-rendering: pixelated;
+
+        }
+
+        #platform_game_foreground{
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+             border: 1px solid grey;
+        } 
+        #platform_game_background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+  </style>
+</head>
+<boy>
+  <img alt="" id="bk" src="images/background/test.png" style="display: none">
+  <div id="platform_game_wrapper">
+    <canvas id="platform_game_foreground"></canvas>
+    <canvas id="platform_game_background"></canvas>
+
+  </div>
+
+  <script>
+
+  var Platform_game = function () {
+
+     var grid9 = new Image();
+        grid9.src = "images/sprites/9grid.png";
+
+    var orb = new Image();
+        orb.src = "images/sprites/orb.png";
+
+    var char_sheet = new Image();
+        char_sheet.src = "images/sprites/astronaut_sheet.png";
+
+
+    var vendors = ['webkit', 'moz'];
+    for(var x = 0; x < vendors.length && !window.requestAnimationFrame; ++x) {
+        window.requestAnimationFrame = window[vendors[x]+'RequestAnimationFrame'];
+        window.cancelAnimationFrame =
+        window[vendors[x]+'CancelAnimationFrame'] || window[vendors[x]+'CancelRequestAnimationFrame'];
+    }
+
+    // game settings 
+    var board_h = 20,
+        board_w = 70,
+        window_w = 30,
+        window_h = 20,
+        tile = 32,
+        x_cam_offset = 0,
+        y_cam_offset = 0,
+        gravity_default = 1.3,
+         gravity = gravity_default,
+        gravity_slow_fall = .5,           
+        x_friction_default = .8,
+        x_friction = x_friction_default,
+        x_friction_air = .7,
+        x_friction_ducking = .95,
+        y_friction = .9,
+        jump_speed_default = 40,
+        jump_speed_low = 10,
+        jump_speed_high = 35,
+        parallax = .5,
+        assets = [],
+        vector_x = 0,
+        vector_y = 0,
+        STICKY_THRESHOLD = .0004;
+
+      // for single frames for temp
+
+      function addFrame(img,name,facing, sx,sy,sw,sh){
+        return {
+          name:name ,
+          img: img,
+          facing: facing,
+          sx: sx * tile,
+          sy: sy * tile,
+          sw: sw * tile,
+          sh: sh * tile
+        }
+      }
+    var ANI_lib = [
+      addFrame(char_sheet,"standing", "right", 0,0,1,2 ),
+      addFrame(char_sheet,"standing", "left",7,0,1,2 ),
+      addFrame(char_sheet,"move", "right", 1,0,1,2 ),
+      addFrame(char_sheet,"move", "left",6,0,1,2 ),
+      addFrame(char_sheet,"jump", "right", 2,0,1,2 ),
+      addFrame(char_sheet,"jump", "left",5,0,1,2 ),
+      addFrame(char_sheet,"duck", "right", 3,0,1,2 ),
+      addFrame(char_sheet,"duck", "left",4,0,1,2 )
+    ]
+
+    console.log(ANI_lib);
+
+
+   
+
+
+
+    function Asset(opt){
+        this.x = opt.x * tile;
+        this.y = opt.y * tile;
+        // Velocity
+        this.vx = 0; 
+        this.vy = 0; 
+        // Acceleration
+        this.ax = 0;
+        this.ay = 0;
+     
+        this.width = opt.width  * tile;
+        this.height = opt.height  * tile;
+        this.onGround = false;
+        this.type = opt.type;
+        this.name = opt.name || "";
+        this.facing = opt.facing || "right";
+        this.visible = true; 
+        this.halfWidth = this.width * .5;
+        this.halfHeight = this.height * .5;
+         this.restitution =  .2;
+         this.top_margin = opt.top_margin ||0;
+        this.left_margin = opt.left_margin ||0;
+        this.right_margin = opt.right_margin ||0;
+        this.updateBounds();
+    }
+
+
+
+
+
+    Asset.prototype = {
+ 
+    // Update bounds includes the rect's
+    // boundary updates
+    updateBounds: function() {
+        this.halfWidth = this.width * .5;
+        this.halfHeight = this.height * .5;
+    },
+ 
+    // Getters for the mid point of the rect
+    getMidX: function() {
+        return this.halfWidth + this.x;
+    },
+ 
+    getMidY: function() {
+        return this.halfHeight + this.y;
+    },
+ 
+    // Getters for the top, left, right, and bottom
+    // of the rectangle
+    getTop: function() {
+        return this.y - this.top_margin;
+    },
+    getLeft: function() {
+        return this.x + this.left_margin;
+    },
+    getRight: function() {
+        return this.x + this.width - this.right_margin;
+    },
+    getBottom: function() {
+        return this.y + this.height;
+    },
+    drawSprite: function(ctx){
+      if(this.sprite){
+        ctx.drawImage(this.sprite.img, this.sprite.sx, this.sprite.sy, this.sprite.sw, this.sprite.sh, this.x, this.y, this.width, this.height);
+      }      
+    },
+    drawBB:function(ctx){      
+      ctx.fillRect(this.x, this.y, this.width, this.height);      
+    },
+    setSprite: function(name){
+      var facing = this.facing;
+      this.sprite = ANI_lib.filter(function(x){return x.name == name && x.facing == facing})[0];
+    }
+};
+
+function didCollide(collider, collidee) {
+ 
+    // Store the collider and collidee edges
+    var l1 = collider.getLeft();
+    var t1 = collider.getTop();
+    var r1 = collider.getRight();
+    var b1 = collider.getBottom();
+     
+    var l2 = collidee.getLeft();
+    var t2 = collidee.getTop();
+    var r2 = collidee.getRight();
+    var b2 = collidee.getBottom();
+     
+    // If the any of the edges are beyond any of the
+    // others, then we know that the box cannot be
+    // colliding
+    if (b1 < t2 || t1 > b2 || r1 < l2 || l1 > r2) {
+        return false;
+    }
+     
+    // If the algorithm made it here, it had to collide
+    return true;
+};
+
+
+
+
+    var player = new Asset({
+          type: "player",
+          name: "jill",
+          width: 1,
+          height: 2,
+          x: 10,
+          y: 5   
+        });
+
+
+    
+      player.jumping = false;
+      player.running = false;
+      player.x_force = .7;
+      player.x_force_run = 2.7;
+      player.jumping_gravity = .5;
+      player.facing = "right";
+      player.dead = false;
+      player.lives = 5;
+      player.held_jump = false;
+      player.mid_jump = true;
+      player.onGround = false;
+      player.y_dist = 0;
+      player.x_dist = 0; 
+      player.last_x = player.x;
+      player.last_y = player.y;     
+      player.fuel_tank = 40;
+      player.rocket_fuel = player.fuel_tank;
+      player.ANI = "standing";
+      player.sprite;
+      // player.left_margin = 4;
+      // player.right_margin = 4;
+      // player.top_margin = 10;
+
+      player.setSprite("standing")
+
+      
+
+
+assets.push(
+  new Asset({
+          type: "platform",
+          name: "test",
+          width: 8,
+          height: 2,
+          x: 0,
+          y: 10       
+        })
+  ) 
+assets.push(
+  new Asset({
+          type: "platform",
+          name: "ground",
+          width: 70,
+          height: 2,
+          x: 0,
+          y: 17       
+        })
+  ) 
+
+assets.push(
+  new Asset({
+          type: "platform",
+          name: "test",
+          width: 3,
+          height: 2,
+          x: 12,
+          y: 15       
+        })
+  ) 
+
+assets.push(
+  new Asset({
+          type: "platform",
+          name: "test",
+          width: 3,
+          height: 1,
+          x: 14,
+          y: 12       
+        })
+  ) 
+
+assets.push(
+  new Asset({
+          type: "platform",
+          name: "test",
+          width: 2,
+          height: 1,
+          x: 16,
+          y: 9       
+        })
+  ) 
+
+assets.push(
+  new Asset({
+          type: "platform",
+          name: "test",
+          width: 1,
+          height: 11,
+          x: 18,
+          y: 6       
+        })
+  ) 
+
+console.log(player)
+console.log(assets)
+
+function abs(val){
+  return Math.abs(val);
+}
+
+    
+
+
+    var ctx_fore,
+        ctx_back,
+        ctx_fore_w,
+        ctx_fore_h,
+        ctx_back_w,
+        ctx_back_h,
+        fps = 60,
+        bX = 30,
+        bY = 30,
+        mX = 10,
+        mY = 20,
+        interval     =    1000/fps,
+        lastTime     =    (new Date()).getTime(),
+        currentTime  =    0,
+        delta = 0;
+
+    ctx_fore = document.getElementById('platform_game_foreground').getContext("2d"),
+    ctx_back = document.getElementById('platform_game_background').getContext("2d"),
+    ctx_fore.canvas.width = window_w * tile,
+    ctx_fore.canvas.height = window_h * tile,
+    ctx_back.canvas.width = window_w * tile,
+    ctx_back.canvas.height = window_h * tile,
+    ctx_fore_w = ctx_fore.canvas.width,
+    ctx_fore_h = ctx_fore.canvas.height,
+    ctx_back_w = ctx_back.canvas.width,
+    ctx_back_h = ctx_back.canvas.height;
+    document.getElementById("platform_game_wrapper").style.width = window_w * tile + "px";
+
+    function update(){
+      
+      player.y_dist = player.y - player.last_y;
+      player.x_dist = player.x - player.last_x; 
+      player.last_x = player.x;
+      player.last_y = player.y; 
+      // x movement
+      if(controller.left && !controller.down){
+         player.facing = "left";
+        player.setSprite("move");
+       
+        player.vx -= player.x_force;
+      } else if(controller.right && !controller.down){
+        player.facing = "right";
+        player.setSprite("move");       
+        player.vx += player.x_force;
+      }
+
+      if(controller.down){
+         player.setSprite("duck");
+      } 
+
+
+      if(controller.jump  && !player.jumping &&!player.held_jump){                
+       player.setSprite("jump");
+       player.jumping = true;
+       player.held_jump = true;
+       player.onGround = false;
+       player.vy -= jump_speed_default;      
+      } 
+
+      if(!controller.jump) {
+        player.held_jump = false;
+      }
+
+      if(player.onGround && !controller.left && !controller.right){
+        player.setSprite("standing");
+      }
+     
+      player.x += player.vx;
+      player.vx *= x_friction;
+
+      //if(!player.onGround){
+        player.vy += gravity;
+        player.vy *= y_friction;
+        player.y += player.vy;
+      //}
+     // console.log(player.getMidX(), player.getMidY())
+    }
+
+    function handleCollision(){
+
+      assets.forEach(function(entity){
+        if(entity.visible){ 
+
+          if(didCollide(player,entity)){
+        
+              collideResolution(player,entity);
+          }
+
+        }
+      });
+    }
+
+    function collideResolution(player, entity){
+          // collision occured
+              var pMidX = player.getMidX();
+              var pMidY = player.getMidY();
+              var aMidX = entity.getMidX();
+              var aMidY = entity.getMidY();
+
+              // To find the side of entry calculate based on
+              // the normalized sides
+              var dx = (aMidX - pMidX) / entity.halfWidth;
+              var dy = (aMidY - pMidY) / entity.halfHeight;
+               
+              // Calculate the absolute change in x and y
+              var absDX = abs(dx);
+              var absDY = abs(dy);
+
+               // If the distance between the normalized x and y
+              // position is less than a small threshold (.1 in this case)
+              // then this object is approaching from a corner
+              if (abs(absDX - absDY) < .1) {
+           
+                  // If the player is approaching from positive X
+                  if (dx < 0) {
+           
+                      // Set the player x to the right side
+                      player.x = entity.getRight() - player.left_margin;
+           
+                  // If the player is approaching from negative X
+                  } else {
+           
+                      // Set the player x to the left side
+                      player.x = entity.getLeft() - player.width + player.right_margin;
+                  }
+           
+                  // If the player is approaching from positive Y
+                  if (dy < 0) {
+           
+                      // Set the player y to the bottom
+                      player.y = entity.getBottom();
+           
+                  // If the player is approaching from negative Y
+                  } else {
+           
+                      // Set the player y to the top
+                      player.y = entity.getTop() - player.height;
+                      console.log(player.y)
+                  }
+                   
+                  // Randomly select a x/y direction to reflect velocity on
+                  if (Math.random() < .5) {
+           
+                      // Reflect the velocity at a reduced rate
+                      player.vx = -player.vx * entity.restitution;
+           
+                      // If the object's velocity is nearing 0, set it to 0
+                      // STICKY_THRESHOLD is set to .0004
+                      if (abs(player.vx) < STICKY_THRESHOLD) {
+                          player.vx = 0;
+                      }
+                  } else {
+           
+                      player.vy = -player.vy * entity.restitution;
+                      if (abs(player.vy) < STICKY_THRESHOLD) {
+                          player.vy = 0;
+                      }
+                  }
+           
+              // If the object is approaching from the sides
+              } else if (absDX > absDY) {
+           
+                  // If the player is approaching from positive X
+                  if (dx < 0) {
+                      player.x = entity.getRight();
+           
+                  } else {
+                  // If the player is approaching from negative X
+                      player.x = entity.getLeft() - player.width;
+                  }
+                   
+                  // Velocity component
+                  player.vx = -player.vx * entity.restitution;
+           
+                  if (abs(player.vx) < STICKY_THRESHOLD) {
+                      player.vx = 0;
+                  }
+           
+              // If this collision is coming from the top or bottom more
+              } else {
+           
+                  // If the player is approaching from positive Y
+                  if (dy < 0) {
+                      player.y = entity.getBottom();
+           
+                  } else {
+                  // If the player is approaching from negative Y
+                      player.y = entity.getTop() - player.height;
+                      player.jumping = false;
+                      player.onGround = true;
+                  }
+                   
+                  // Velocity component
+                  player.vy = -player.vy * entity.restitution;
+                  if (abs(player.vy) < STICKY_THRESHOLD) {
+                      player.vy = 0;
+                  }
+              }
+    }
+
+
+
+
+    function draw(){
+      ctx_fore.clearRect(0,0,window_w *tile,window_h *tile);
+
+      assets.forEach(function(a){
+        a.drawBB(ctx_fore);
+      })
+      player.drawSprite(ctx_fore);
+
+    }
+
+
+     controller = {
+          left:false,
+          right:false,
+          jump:false,
+          down:false,
+          up:false,
+          keyListener:function(event) {
+            var keydown = (event.type == "keydown")?true:false,
+                keyup = (event.type == "keyup")?true:false;
+                // if(event.type == "mousemove"){
+                //   player.x=event.clientX;
+                //   player.y=event.clientY;
+                // }
+
+             switch(event.keyCode) {
+              case 37:// left key
+                controller.left = keydown;
+              break;
+              case 90:// z key
+                controller.run = keydown;
+              break;
+              case 39:// right key
+                controller.right = keydown;
+              break;
+               case 38:// up key
+                controller.up = keydown;
+              break;
+              case 40:// down key
+                controller.down = keydown;
+              break;
+              case 88:// x key              
+                controller.jump = keydown;
+                // controller.jump_up = keyup;
+              break;
+            }
+          }
+        };
+
+    function gameLoop() {
+        window.requestAnimationFrame(gameLoop);
+
+        currentTime = (new Date()).getTime();
+        delta = (currentTime-lastTime);
+
+        if(delta > interval) {
+          // main game loop start
+          update();
+          handleCollision();
+          draw();
+          // main game loop end
+          lastTime = currentTime - (delta % interval);
+        }
+    }
+
+    window.addEventListener("keydown", controller.keyListener)
+    window.addEventListener("keyup", controller.keyListener);
+     window.addEventListener("mousemove", controller.keyListener);
+
+    gameLoop();                   
+  }
+    
+
+  window.onload = function() {
+    Platform_game();
+  }
+
+
+  </script>
+</boy>
+</html>
