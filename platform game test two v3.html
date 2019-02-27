@@ -6,17 +6,13 @@
   <style>
         input{
             width: 100%;
-
         }
-
         #platform_game_wrapper{
             position: relative;
             margin: auto;
             margin-top: 50px;
             image-rendering: pixelated;
-
         }
-
         #platform_game_foreground{
             position: absolute;
             top: 0;
@@ -41,26 +37,19 @@
   </div>
 
   <script>
-
   var Platform_game = function () {
-
      var grid9 = new Image();
         grid9.src = "images/sprites/9grid.png";
-
     var orb = new Image();
         orb.src = "images/sprites/orb.png";
-
     var char_sheet = new Image();
         char_sheet.src = "images/sprites/astronaut_sheet.png";
-
-
     var vendors = ['webkit', 'moz'];
     for(var x = 0; x < vendors.length && !window.requestAnimationFrame; ++x) {
         window.requestAnimationFrame = window[vendors[x]+'RequestAnimationFrame'];
         window.cancelAnimationFrame =
         window[vendors[x]+'CancelAnimationFrame'] || window[vendors[x]+'CancelRequestAnimationFrame'];
     }
-
     // game settings 
     var board_h = 20,
         board_w = 70,
@@ -72,7 +61,7 @@
         gravity_default = 1.3,
          gravity = gravity_default,
         gravity_slow_fall = .5,           
-        x_friction_default = .8,
+        x_friction_default = .75,
         x_friction = x_friction_default,
         x_friction_air = .7,
         x_friction_ducking = .95,
@@ -85,9 +74,7 @@
         vector_x = 0,
         vector_y = 0,
         STICKY_THRESHOLD = .0004;
-
       // for single frames for temp
-
       function addFrame(img,name,facing, sx,sy,sw,sh){
         return {
           name:name ,
@@ -109,14 +96,8 @@
       addFrame(char_sheet,"duck", "right", 3,0,1,2 ),
       addFrame(char_sheet,"duck", "left",4,0,1,2 )
     ]
-
     console.log(ANI_lib);
-
-
    
-
-
-
     function Asset(opt){
         this.x = opt.x * tile;
         this.y = opt.y * tile;
@@ -142,11 +123,6 @@
         this.right_margin = opt.right_margin ||0;
         this.updateBounds();
     }
-
-
-
-
-
     Asset.prototype = {
  
     // Update bounds includes the rect's
@@ -192,7 +168,6 @@
       this.sprite = ANI_lib.filter(function(x){return x.name == name && x.facing == facing})[0];
     }
 };
-
 function didCollide(collider, collidee) {
  
     // Store the collider and collidee edges
@@ -216,10 +191,6 @@ function didCollide(collider, collidee) {
     // If the algorithm made it here, it had to collide
     return true;
 };
-
-
-
-
     var player = new Asset({
           type: "player",
           name: "jill",
@@ -228,12 +199,10 @@ function didCollide(collider, collidee) {
           x: 10,
           y: 5   
         });
-
-
     
       player.jumping = false;
       player.running = false;
-      player.x_force = .7;
+      player.x_force = 1.1;
       player.x_force_run = 2.7;
       player.jumping_gravity = .5;
       player.facing = "right";
@@ -253,12 +222,8 @@ function didCollide(collider, collidee) {
       // player.left_margin = 4;
       // player.right_margin = 4;
       // player.top_margin = 10;
-
       player.setSprite("standing")
-
       
-
-
 assets.push(
   new Asset({
           type: "platform",
@@ -279,7 +244,6 @@ assets.push(
           y: 17       
         })
   ) 
-
 assets.push(
   new Asset({
           type: "platform",
@@ -290,7 +254,6 @@ assets.push(
           y: 15       
         })
   ) 
-
 assets.push(
   new Asset({
           type: "platform",
@@ -301,7 +264,6 @@ assets.push(
           y: 12       
         })
   ) 
-
 assets.push(
   new Asset({
           type: "platform",
@@ -312,7 +274,6 @@ assets.push(
           y: 9       
         })
   ) 
-
 assets.push(
   new Asset({
           type: "platform",
@@ -323,17 +284,12 @@ assets.push(
           y: 6       
         })
   ) 
-
 console.log(player)
 console.log(assets)
-
 function abs(val){
   return Math.abs(val);
 }
-
     
-
-
     var ctx_fore,
         ctx_back,
         ctx_fore_w,
@@ -349,7 +305,6 @@ function abs(val){
         lastTime     =    (new Date()).getTime(),
         currentTime  =    0,
         delta = 0;
-
     ctx_fore = document.getElementById('platform_game_foreground').getContext("2d"),
     ctx_back = document.getElementById('platform_game_background').getContext("2d"),
     ctx_fore.canvas.width = window_w * tile,
@@ -361,7 +316,6 @@ function abs(val){
     ctx_back_w = ctx_back.canvas.width,
     ctx_back_h = ctx_back.canvas.height;
     document.getElementById("platform_game_wrapper").style.width = window_w * tile + "px";
-
     function update(){
       
       player.y_dist = player.y - player.last_y;
@@ -379,12 +333,9 @@ function abs(val){
         player.setSprite("move");       
         player.vx += player.x_force;
       }
-
       if(controller.down){
          player.setSprite("duck");
       } 
-
-
       if(controller.jump  && !player.jumping &&!player.held_jump){                
        player.setSprite("jump");
        player.jumping = true;
@@ -392,18 +343,15 @@ function abs(val){
        player.onGround = false;
        player.vy -= jump_speed_default;      
       } 
-
       if(!controller.jump) {
         player.held_jump = false;
       }
-
       if(player.onGround && !controller.left && !controller.right){
         player.setSprite("standing");
       }
      
       player.x += player.vx;
       player.vx *= x_friction;
-
       //if(!player.onGround){
         player.vy += gravity;
         player.vy *= y_friction;
@@ -411,28 +359,22 @@ function abs(val){
       //}
      // console.log(player.getMidX(), player.getMidY())
     }
-
     function handleCollision(){
-
       assets.forEach(function(entity){
         if(entity.visible){ 
-
           if(didCollide(player,entity)){
         
               collideResolution(player,entity);
           }
-
         }
       });
     }
-
     function collideResolution(player, entity){
           // collision occured
               var pMidX = player.getMidX();
               var pMidY = player.getMidY();
               var aMidX = entity.getMidX();
               var aMidY = entity.getMidY();
-
               // To find the side of entry calculate based on
               // the normalized sides
               var dx = (aMidX - pMidX) / entity.halfWidth;
@@ -441,7 +383,6 @@ function abs(val){
               // Calculate the absolute change in x and y
               var absDX = abs(dx);
               var absDY = abs(dy);
-
                // If the distance between the normalized x and y
               // position is less than a small threshold (.1 in this case)
               // then this object is approaching from a corner
@@ -533,21 +474,13 @@ function abs(val){
                   }
               }
     }
-
-
-
-
     function draw(){
       ctx_fore.clearRect(0,0,window_w *tile,window_h *tile);
-
       assets.forEach(function(a){
         a.drawBB(ctx_fore);
       })
       player.drawSprite(ctx_fore);
-
     }
-
-
      controller = {
           left:false,
           right:false,
@@ -561,7 +494,6 @@ function abs(val){
                 //   player.x=event.clientX;
                 //   player.y=event.clientY;
                 // }
-
              switch(event.keyCode) {
               case 37:// left key
                 controller.left = keydown;
@@ -585,13 +517,10 @@ function abs(val){
             }
           }
         };
-
     function gameLoop() {
         window.requestAnimationFrame(gameLoop);
-
         currentTime = (new Date()).getTime();
         delta = (currentTime-lastTime);
-
         if(delta > interval) {
           // main game loop start
           update();
@@ -601,20 +530,15 @@ function abs(val){
           lastTime = currentTime - (delta % interval);
         }
     }
-
     window.addEventListener("keydown", controller.keyListener)
     window.addEventListener("keyup", controller.keyListener);
      window.addEventListener("mousemove", controller.keyListener);
-
     gameLoop();                   
   }
     
-
   window.onload = function() {
     Platform_game();
   }
-
-
   </script>
 </boy>
 </html>
