@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+  <script src="Vector.js"></script>
+  <script src="Victor.js"></script>
+  <script src="Entity.js"></script>
+  <meta charset="UTF-8">
+  <title>Platform game test</title>
+  <style>
+        input{
+            width: 100%;
+        }
+        #platform_game_wrapper{
+            position: relative;
+            margin: auto;
+            margin-top: 50px;
+            image-rendering: pixelated;
+        }
+        #platform_game_foreground{
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+             border: 1px solid grey;
+        } 
+        #platform_game_background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+  </style>
+</head>
+<body>
+  <img alt="" id="bk" src="images/background/test.png" style="display: none">
+  <div id="platform_game_wrapper">
+    <canvas id="platform_game_foreground"></canvas>
+    <canvas id="platform_game_background"></canvas>
+
+  </div>
+
+  <script>
+
+    // Game test using Vectors for motion and physics
+
+  var Platform_game = function () {
+       
+
+    var vendors = ['webkit', 'moz'];
+    for(var x = 0; x < vendors.length && !window.requestAnimationFrame; ++x) {
+        window.requestAnimationFrame = window[vendors[x]+'RequestAnimationFrame'];
+        window.cancelAnimationFrame =
+        window[vendors[x]+'CancelAnimationFrame'] || window[vendors[x]+'CancelRequestAnimationFrame'];
+    }
+    // game settings 
+    var board_h = 20,
+        board_w = 70,
+        window_w = 30,
+        window_h = 20,
+        tile = 32,
+        fps = 60,
+        interval     =    1000/fps,
+        lastTime     =    (new Date()).getTime(),
+        currentTime  =    0,
+        delta = 0,
+        ctx_fore,
+        ctx_back,
+        ctx_fore_w,
+        ctx_fore_h,
+        ctx_back_w,
+        ctx_back_h,
+        friction = .93,
+        gravity = Vector.create(0,0.1);
+
+
+    ctx_fore = document.getElementById('platform_game_foreground').getContext("2d"),
+    ctx_back = document.getElementById('platform_game_background').getContext("2d"),
+    ctx_fore.canvas.width = window_w * tile,
+    ctx_fore.canvas.height = window_h * tile,
+    ctx_back.canvas.width = window_w * tile,
+    ctx_back.canvas.height = window_h * tile,
+    ctx_fore_w = ctx_fore.canvas.width,
+    ctx_fore_h = ctx_fore.canvas.height,
+    ctx_back_w = ctx_back.canvas.width,
+    ctx_back_h = ctx_back.canvas.height;
+
+    function tiles(num){
+      return tile * num;
+    }
+
+
+    var player = Entity.create(20,200, 32, 64);
+    player.speed = 1;
+  //  player.velocity.setLength(2);
+   // player.velocity.setAngle(Math.PI /4)
+   var block = Entity.create(200,400,96,96);
+   block.setBBcolor("orange");
+
+   console.log(player)
+ 
+
+  
+    function update(dt){
+
+     // player.position.addTo(player.velocity);
+     // player.accelerate(gravity);
+    
+     
+
+      if(controller.right){
+        player.force.setX(player.speed);
+      } else if(controller.left){
+        player.force.setX(-player.speed);
+      } else {
+        player.force.setX(0);
+      }
+
+      if(controller.up){
+        player.force.setY(-player.speed);
+      } else if(controller.down){
+        player.force.setY(player.speed);
+      } else {
+        player.force.setY(0);
+      }
+
+      player.accelerate(player.force);
+      player.update();
+
+
+
+
+      // if (controller.jump && !player.jumping) {
+      //   player.vy = new Vector(0,-100);
+      //   player.jumping = true;
+      // }
+
+    //player.vy = player.vy.add(gravity.multiplyScal(dt/1000));
+      
+    }
+
+    function handleCollision(){
+
+
+      if(didCollide(player, block)){
+        block.setBBcolor("red");       
+      } else {
+        block.setBBcolor("orange");
+      }
+
+    }
+
+    function didCollide(collider, collidee){
+      if (collider.getX() < collidee.getRight() &&
+         collider.getRight() > collidee.getX() &&
+         collider.getY() < collidee.getBottom() &&
+         collider.getBottom() > collidee.getY() ) {
+          // collision detected!
+        return true;
+      }
+      return false;
+    }
+
+
+  
+
+    function draw(){
+      ctx_fore.clearRect(0,0, tiles(window_w), tiles(window_h))
+
+      player.drawBoundingBox(ctx_fore);
+      block.drawBoundingBox(ctx_fore);
+
+    }
+
+
+     controller = {
+          left:false,
+          right:false,
+          jump:false,
+          down:false,
+          up:false,
+          keyListener:function(event) {
+            var keydown = (event.type == "keydown")?true:false,
+                keyup = (event.type == "keyup")?true:false;
+                // if(event.type == "mousemove"){
+                //   player.x=event.clientX;
+                //   player.y=event.clientY;
+                // }
+             switch(event.keyCode) {
+              case 37:// left key
+                controller.left = keydown;
+              break;
+              case 90:// z key
+                controller.run = keydown;
+              break;
+              case 39:// right key
+                controller.right = keydown;
+              break;
+               case 38:// up key
+                controller.up = keydown;
+              break;
+              case 40:// down key
+                controller.down = keydown;
+              break;
+              case 88:// x key              
+                controller.jump = keydown;
+                // controller.jump_up = keyup;
+              break;
+            }
+          }
+        };
+
+    function gameLoop() {
+        window.requestAnimationFrame(gameLoop);
+        currentTime = (new Date()).getTime();
+        delta = (currentTime-lastTime);
+        if(delta > interval) {
+          // main game loop start
+          update(delta);
+          handleCollision();
+          draw();
+          // main game loop end
+          lastTime = currentTime - (delta % interval);
+        }
+    }
+    window.addEventListener("keydown", controller.keyListener)
+    window.addEventListener("keyup", controller.keyListener);
+     window.addEventListener("mousemove", controller.keyListener);
+    gameLoop();                   
+  }
+    
+  window.onload = function() {
+    Platform_game();
+  }
+  </script>
+</body>
+</html>
